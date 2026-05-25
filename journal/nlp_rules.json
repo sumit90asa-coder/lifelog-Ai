@@ -1,0 +1,49 @@
+{
+  "moods": {
+    "positive": [
+      "happy",
+      "great",
+      "amazing",
+      "productive",
+      "joyful",
+      "calm"
+    ],
+
+    "negative": [
+      "sad",
+      "tired",
+      "anxious",
+      "stressed",
+      "drained",
+      "overwhelmed"
+    ]
+  },
+
+  "activities": [
+    "run",
+    "ran",
+    "gym",
+    "yoga",
+    "meditate",
+    "walk",
+    "swim"
+  ],
+
+  "metrics": {
+    "sleep_hours": [
+      "slept (\\d+\\.?\\d*) ?h",
+      "sleep (\\d+\\.?\\d*) ?h"
+    ],
+
+    "distance": [
+      "(\\d+\\.?\\d*) ?(km|miles|mi)"
+    ]
+  },
+
+  "people_signals": [
+    "with",
+    "met",
+    "called",
+    "talked to"
+  ]
+}

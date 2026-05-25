@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Lifelog AI{% endblock %}</title>
+
+    {% load static %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- MOBILE TOPBAR -->
+<div class="topbar" id="topbar">
+    <div class="topbar-logo">
+        <div class="logo-icon" style="width:34px;height:34px;font-size:.95rem;">L</div>
+        <span style="font-weight:700;font-size:.95rem;color:var(--beige);">Lifelog AI</span>
+    </div>
+    <div class="topbar-actions">
+        <button class="topbar-logout" onclick="logout()">Logout</button>
+        <button class="hamburger" onclick="toggleSidebar()">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <line x1="3" y1="6"  x2="19" y2="6"/>
+                <line x1="3" y1="12" x2="19" y2="12"/>
+                <line x1="3" y1="18" x2="19" y2="18"/>
+            </svg>
+        </button>
+    </div>
+</div>
+
+<!-- OVERLAY -->
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- LAYOUT -->
+<div class="app-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+
+        <div class="sidebar-logo">
+            <div class="logo-icon">L</div>
+            <div>
+                <div class="logo-title">Lifelog AI</div>
+                <div class="logo-sub">Smart Journal SaaS</div>
+            </div>
+        </div>
+
+        <nav>
+            <a href="/dashboard/" onclick="closeSidebar()"
+               class="nav-item {% if request.path == '/dashboard/' %}nav-active{% endif %}">
+                📊 Dashboard
+            </a>
+            <a href="/insights/" onclick="closeSidebar()"
+               class="nav-item {% if request.path == '/insights/' %}nav-active{% endif %}">
+                🤖 Insights
+            </a>
+            <a href="/entries/" onclick="closeSidebar()"
+               class="nav-item {% if request.path == '/entries/' %}nav-active{% endif %}">
+                📓 Recent Entries
+            </a>
+            <a href="/profile/" onclick="closeSidebar()"
+               class="nav-item {% if request.path == '/profile/' %}nav-active{% endif %}">
+                👤 Profile
+            </a>
+        </nav>
+
+        <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+</div>
+
+<script src="{% static 'js/main.js' %}"></script>
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

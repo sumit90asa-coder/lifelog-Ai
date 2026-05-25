@@ -1,0 +1,129 @@
+{% extends 'journal/base.html' %}
+{% block title %}Profile — Lifelog AI{% endblock %}
+
+{% block content %}
+
+<div style="display:flex;flex-direction:column;gap:1.25rem;">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+        <div id="avatarCircle" style="width:64px;height:64px;border-radius:1rem;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:800;flex-shrink:0;">?</div>
+        <div style="flex:1;min-width:0;">
+            <h1 id="displayName" class="page-title" style="font-size:1.8rem;">Loading...</h1>
+            <p id="displayUsername" style="color:var(--text-m);font-size:.9rem;margin:.1rem 0 0;">@username</p>
+            <p id="memberSince"    style="color:var(--text-d);font-size:.8rem;margin-top:.15rem;"></p>
+        </div>
+        <button id="exportBtn" onclick="downloadCSV()" class="btn btn-primary">⬇️ Export CSV</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid-stats-4">
+        <div class="stat-card text-center"><div class="stat-label">Total</div><div id="statTotal" class="stat-value">—</div></div>
+        <div class="stat-card text-center"><div class="stat-label">Avg Mood</div><div id="statMood" class="stat-value stat-green">—</div></div>
+        <div class="stat-card text-center"><div class="stat-label">Streak</div><div id="statStreak" class="stat-value stat-amber">—</div></div>
+        <div class="stat-card text-center"><div class="stat-label">Best</div><div id="statBest" class="stat-value stat-purple">—</div></div>
+    </div>
+
+    <!-- Heatmap -->
+    <div class="card">
+        <div class="card-title">📅 Mood Heatmap</div>
+        <div class="card-sub">Journaling activity over the last year</div>
+        <div class="heatmap-scroll">
+            <div style="display:flex;gap:.5rem;min-width:max-content;">
+                <div style="display:flex;flex-direction:column;gap:2px;font-size:.7rem;color:var(--text-d);margin-top:1px;">
+                    <span style="height:13px;line-height:13px">M</span><span style="height:13px"></span>
+                    <span style="height:13px;line-height:13px">W</span><span style="height:13px"></span>
+                    <span style="height:13px;line-height:13px">F</span><span style="height:13px"></span>
+                    <span style="height:13px;line-height:13px">S</span>
+                </div>
+                <div id="heatmapGrid" style="display:flex;gap:2px;"></div>
+            </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:.4rem;margin-top:.75rem;font-size:.75rem;color:var(--text-d);">
+            <span>No entry</span>
+            <div class="heat-cell" style="background:#2a2618;"></div>
+            <div class="heat-cell" style="background:#1e3a1a;"></div>
+            <div class="heat-cell" style="background:#2d5a27;"></div>
+            <div class="heat-cell" style="background:#4a7c40;"></div>
+            <div class="heat-cell" style="background:#7ab85a;"></div>
+            <span>High mood</span>
+        </div>
+    </div>
+
+    <!-- Activities + People -->
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-title">🏃 Top Activities</div>
+            <div id="topActivities" style="margin-top:.75rem;"><p style="color:var(--text-m);font-size:.9rem;">Loading...</p></div>
+        </div>
+        <div class="card">
+            <div class="card-title">👥 People Mentioned</div>
+            <div id="topPeople" style="margin-top:.75rem;"><p style="color:var(--text-m);font-size:.9rem;">Loading...</p></div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+if (!requireAuth()) {}
+
+function buildHeatmap(entries) {
+    const grid = document.getElementById('heatmapGrid');
+    const dayMap = {};
+    entries.forEach(e => { const d=new Date(e.created_at).toISOString().slice(0,10); if(!dayMap[d])dayMap[d]=[]; dayMap[d].push(parseFloat(e.mood_score)||0); });
+    const today=new Date(); const start=new Date(today); start.setDate(start.getDate()-364); start.setDate(start.getDate()-((start.getDay()+6)%7));
+    const mc = avg => avg===0?'#2a2618':avg<=2?'#4a1a0e':avg<=4?'#1e3a1a':avg<=6?'#2d5a27':avg<=8?'#4a7c40':'#7ab85a';
+    let col=document.createElement('div'); col.style.cssText='display:flex;flex-direction:column;gap:2px;';
+    const cur=new Date(start);
+    while(cur<=today){
+        if(col.children.length===7){grid.appendChild(col);col=document.createElement('div');col.style.cssText='display:flex;flex-direction:column;gap:2px;';}
+        const ds=cur.toISOString().slice(0,10); const sc=dayMap[ds]||[]; const avg=sc.length?sc.reduce((a,b)=>a+b,0)/sc.length:0;
+        const cell=document.createElement('div'); cell.className='heat-cell'; cell.style.background=mc(avg);
+        cell.title=sc.length?`${ds}: ${sc.length} entries, avg ${avg.toFixed(1)}`:`${ds}: No entry`;
+        col.appendChild(cell); cur.setDate(cur.getDate()+1);
+    }
+    if(col.children.length)grid.appendChild(col);
+}
+
+async function buildStats(entries) {
+    const ac={};const pc={};
+    for(const e of entries.slice(0,30)){
+        const r=await apiFetch('/api/entries/preview/',{method:'POST',body:JSON.stringify({content:e.content})});
+        if(!r||!r.ok)continue; const p=await r.json();
+        (p.activities||[]).forEach(a=>{ac[a]=(ac[a]||0)+1;});
+        (p.people_mentioned||[]).forEach(x=>{pc[x]=(pc[x]||0)+1;});
+    }
+    const bar=(n,c,max,cls)=>`<div class="bar-row"><div class="bar-row-top"><span>${n}</span><span>${c}x</span></div><div class="bar-bg"><div class="bar-fill ${cls}" style="width:${Math.round(c/max*100)}%"></div></div></div>`;
+    const tA=Object.entries(ac).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const tP=Object.entries(pc).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    document.getElementById('topActivities').innerHTML=tA.length?tA.map(([n,c])=>bar(n,c,tA[0][1],'bar-green')).join(''):'<p style="color:var(--text-m);font-size:.9rem">No activities yet.</p>';
+    document.getElementById('topPeople').innerHTML=tP.length?tP.map(([n,c])=>bar(n,c,tP[0][1],'bar-beige')).join(''):'<p style="color:var(--text-m);font-size:.9rem">No people yet.</p>';
+}
+
+window.downloadCSV = async function() {
+    const btn=document.getElementById('exportBtn'); btn.textContent='⏳ Generating...'; btn.disabled=true;
+    try {
+        const r=await apiFetch('/api/entries/'); if(!r)return;
+        const raw=await r.json(); const entries=Array.isArray(raw)?raw:(raw.results||[]);
+        if(!entries.length){alert('No entries to export.');return;}
+        const enriched=[];
+        for(const e of entries){let acts='',peep='',emotion='';try{const pr=await apiFetch('/api/entries/preview/',{method:'POST',body:JSON.stringify({content:e.content})});if(pr&&pr.ok){const p=await pr.json();acts=(p.activities||[]).join(' | ');peep=(p.people_mentioned||[]).join(' | ');emotion=p.emotion||'';}}catch(pe){}enriched.push({...e,acts,peep,emotion});}
+        const rows=[['ID','Date','Time','Day','Mood Score','Emotion','Activities','People','Word Count','Content']];
+        enriched.forEach(e=>{const d=new Date(e.created_at);rows.push([e.id,d.toLocaleDateString('en-GB'),d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),d.toLocaleDateString('en-GB',{weekday:'long'}),e.mood_score,e.emotion,'"'+e.acts.replace(/"/g,'""')+'"','"'+e.peep.replace(/"/g,'""')+'"',(e.content||'').split(/\s+/).filter(Boolean).length,'"'+(e.content||'').replace(/"/g,'""')+'"']);});
+        rows.push([]);rows.push(['=== SUMMARY ===']);rows.push(['Total Entries',entries.length]);rows.push(['Average Mood',(entries.reduce((a,e)=>a+(e.mood_score||0),0)/entries.length).toFixed(1)]);
+        const csv=rows.map(r=>r.join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`lifelog_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);
+    } finally { btn.textContent='⬇️ Export CSV'; btn.disabled=false; }
+};
+
+async function init() {
+    const ir=await apiFetch('/api/insights/'); if(ir&&ir.ok){const d=await ir.json();document.getElementById('statTotal').textContent=d.total_entries??'—';document.getElementById('statMood').textContent=d.average_mood??'—';document.getElementById('statStreak').textContent=d.current_streak??'—';}
+    const mr=await apiFetch('/api/me/'); if(mr&&mr.ok){const m=await mr.json();const name=m.full_name||m.username;document.getElementById('displayName').textContent=name;document.getElementById('displayUsername').textContent='@'+m.username;document.getElementById('avatarCircle').textContent=name[0].toUpperCase();if(m.date_joined)document.getElementById('memberSince').textContent='Member since '+new Date(m.date_joined).toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});}
+    const er=await apiFetch('/api/entries/'); if(!er||!er.ok)return;
+    const raw=await er.json(); const entries=Array.isArray(raw)?raw:(raw.results||[]);
+    if(entries.length){document.getElementById('statBest').textContent=Math.max(...entries.map(e=>e.mood_score||0));buildHeatmap(entries);buildStats(entries);}
+}
+init();
+</script>
+{% endblock %}

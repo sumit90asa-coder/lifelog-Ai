@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register — Lifelog AI</title>
+    {% load static %}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+</head>
+<body>
+<div class="auth-wrap">
+<div class="auth-card">
+
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:2rem;">
+        <div class="logo-icon">L</div>
+        <div><div class="logo-title">Lifelog AI</div><div class="logo-sub">Smart Journal SaaS</div></div>
+    </div>
+
+    <h1 class="auth-title">Create Account</h1>
+    <p class="auth-sub">Start your AI journal today</p>
+
+    <div style="display:flex;flex-direction:column;gap:.75rem;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+            <input type="text" id="firstName" class="input" placeholder="First Name">
+            <input type="text" id="lastName"  class="input" placeholder="Last Name">
+        </div>
+        <input type="text"     id="username"  class="input" placeholder="Username">
+        <input type="email"    id="email"     class="input" placeholder="Email address">
+        <input type="password" id="password"  class="input" placeholder="Password" oninput="checkStrength(this.value)">
+
+        <div id="strengthWrap" style="display:none;">
+            <div class="strength-bar"><div id="strengthFill" class="strength-fill" style="width:0;"></div></div>
+            <p id="strengthLabel" style="font-size:.8rem;margin-top:.2rem;"></p>
+        </div>
+
+        <input type="password" id="password2" class="input" placeholder="Confirm Password">
+        <p id="errorMsg"   style="color:#e07060;font-size:.85rem;display:none;"></p>
+        <p id="successMsg" style="color:var(--primary-l);font-size:.85rem;display:none;"></p>
+        <button id="registerBtn" onclick="registerUser()" class="btn btn-primary" style="width:100%;justify-content:center;padding:1rem;">Create Account</button>
+    </div>
+
+    <p style="text-align:center;margin-top:1.25rem;font-size:.9rem;color:var(--text-m);">
+        Already have an account? <a href="/login/" style="color:var(--primary-l);text-decoration:none;">Login</a>
+    </p>
+
+</div>
+</div>
+
+<script>
+if (localStorage.getItem('access_token')) window.location.href = '/dashboard/';
+
+function checkStrength(val) {
+    const wrap=document.getElementById('strengthWrap'),fill=document.getElementById('strengthFill'),label=document.getElementById('strengthLabel');
+    if(!val){wrap.style.display='none';return;} wrap.style.display='block';
+    let s=0; if(val.length>=8)s++; if(/[A-Z]/.test(val))s++; if(/[0-9]/.test(val))s++; if(/[^A-Za-z0-9]/.test(val))s++;
+    const lvls=[{p:'25%',c:'#e07060',t:'Weak'},{p:'50%',c:'#c4a030',t:'Fair'},{p:'75%',c:'#7ab85a',t:'Good'},{p:'100%',c:'#5a8c3e',t:'Strong'}];
+    const l=lvls[s-1]||lvls[0]; fill.style.width=l.p; fill.style.background=l.c; label.textContent=l.t; label.style.color=l.c;
+}
+
+async function registerUser() {
+    const username=document.getElementById('username').value.trim(), email=document.getElementById('email').value.trim(),
+          password=document.getElementById('password').value, password2=document.getElementById('password2').value,
+          firstName=document.getElementById('firstName').value.trim(), lastName=document.getElementById('lastName').value.trim();
+    const err=document.getElementById('errorMsg'), succ=document.getElementById('successMsg'), btn=document.getElementById('registerBtn');
+    err.style.display='none'; succ.style.display='none';
+    if(!username||!password){err.textContent='Username and password are required.';err.style.display='block';return;}
+    if(password!==password2){err.textContent='Passwords do not match.';err.style.display='block';return;}
+    if(password.length<8){err.textContent='Password must be at least 8 characters.';err.style.display='block';return;}
+    btn.textContent='Creating...'; btn.disabled=true;
+    try {
+        const res=await fetch('/api/register/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,email,password,password2,first_name:firstName,last_name:lastName})});
+        const data=await res.json();
+        if(!res.ok){err.textContent=Object.values(data).flat().join(' ')||'Registration failed.';err.style.display='block';btn.textContent='Create Account';btn.disabled=false;return;}
+        const lr=await fetch('/api/token/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+        const ld=await lr.json();
+        if(lr.ok){localStorage.setItem('access_token',ld.access);localStorage.setItem('refresh_token',ld.refresh);succ.textContent='✅ Account created! Redirecting...';succ.style.display='block';setTimeout(()=>window.location.href='/dashboard/',1000);}
+        else{succ.textContent='✅ Account created! Please login.';succ.style.display='block';setTimeout(()=>window.location.href='/login/',1500);}
+    } catch(e){err.textContent='Network error.';err.style.display='block';btn.textContent='Create Account';btn.disabled=false;}
+}
+document.addEventListener('keydown', e => { if(e.key==='Enter') registerUser(); });
+</script>
+</body>
+</html>

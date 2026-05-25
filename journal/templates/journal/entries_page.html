@@ -1,0 +1,123 @@
+{% extends 'journal/base.html' %}
+{% block title %}Recent Entries — Lifelog AI{% endblock %}
+
+{% block content %}
+
+<div style="display:flex;flex-direction:column;gap:1.25rem;">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem;">
+        <div class="page-header" style="margin-bottom:0">
+            <h1 class="page-title">Recent Entries</h1>
+            <p class="page-sub">All your journal entries</p>
+        </div>
+        <a href="/dashboard/" class="btn btn-primary">+ New Entry</a>
+    </div>
+
+    <div class="card filter-bar" style="padding:1rem;">
+        <input id="searchInput" type="text" class="input" placeholder="🔍 Search entries..." oninput="filterEntries()" style="flex:1;min-width:0;">
+        <select id="moodFilter" onchange="filterEntries()" class="input" style="width:auto;">
+            <option value="">All Moods</option>
+            <option value="high">High (7–10)</option>
+            <option value="mid">Medium (4–6)</option>
+            <option value="low">Low (1–3)</option>
+        </select>
+        <span id="entryCount" style="color:var(--text-m);font-size:.85rem;white-space:nowrap;"></span>
+    </div>
+
+    <div id="entriesContainer"><p style="color:var(--text-m)">Loading...</p></div>
+
+</div>
+
+<!-- DELETE MODAL -->
+<div id="deleteModal" class="modal-back">
+    <div class="modal" style="max-width:380px;text-align:center;border-color:var(--danger);">
+        <div style="font-size:3rem;margin-bottom:.75rem;">🗑️</div>
+        <h3 style="font-size:1.25rem;font-weight:700;margin-bottom:.5rem;">Delete Entry?</h3>
+        <p style="color:var(--text-m);font-size:.9rem;margin-bottom:1.5rem;">This cannot be undone.</p>
+        <div style="display:flex;gap:.75rem;">
+            <button onclick="cancelDelete()" class="btn btn-ghost" style="flex:1;justify-content:center;">Cancel</button>
+            <button onclick="executeDelete()" class="btn btn-danger" style="flex:1;justify-content:center;">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="editModal" class="modal-back">
+    <div class="modal">
+        <h3 style="font-size:1.25rem;font-weight:700;margin-bottom:1rem;">✏️ Edit Entry</h3>
+        <textarea id="editTextarea" class="input" style="height:150px;resize:none;margin-bottom:.75rem;"></textarea>
+        <div style="display:flex;gap:.75rem;">
+            <button onclick="cancelEdit()" class="btn btn-ghost" style="flex:1;justify-content:center;">Cancel</button>
+            <button id="saveEditBtn" onclick="saveEdit()" class="btn btn-primary" style="flex:1;justify-content:center;">Save Changes</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+if (!requireAuth()) {}
+let allEntries = [];
+
+async function loadEntries() {
+    const r = await apiFetch('/api/entries/'); if (!r) return;
+    const raw = await r.json(); allEntries = Array.isArray(raw) ? raw : (raw.results||[]);
+    renderEntries(allEntries);
+}
+
+function renderEntries(entries) {
+    const c = document.getElementById('entriesContainer');
+    document.getElementById('entryCount').textContent = entries.length + ' entries';
+    if (!entries.length) { c.innerHTML = '<div class="card" style="text-align:center;padding:2rem;"><p style="color:var(--text-m)">No entries found.</p><a href="/dashboard/" style="color:var(--primary-l);font-size:.9rem;">Write your first entry →</a></div>'; return; }
+    c.innerHTML = entries.map(e => `
+        <div class="entry-card" id="entry-${e.id}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem;">
+                <span class="entry-mood ${moodColor(e.mood_score)}">Mood ${e.mood_score ?? 'N/A'}/10</span>
+                <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+                    <span style="color:var(--text-d);font-size:.78rem;">${new Date(e.created_at).toLocaleString()}</span>
+                    <button onclick="openEditModal(${e.id},\`${e.content.replace(/`/g,"'").replace(/\n/g,'\\n')}\`)" class="btn btn-ghost btn-sm">✏️ Edit</button>
+                    <button onclick="confirmDelete(${e.id})" class="btn btn-sm" style="background:rgba(139,58,42,0.2);color:#e07060;border:1px solid rgba(139,58,42,0.3);">🗑️</button>
+                </div>
+            </div>
+            <p style="color:var(--text-m);font-size:.9rem;line-height:1.6;" id="entry-content-${e.id}">${e.content}</p>
+        </div>`).join('');
+}
+
+window.filterEntries = function() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const m = document.getElementById('moodFilter').value;
+    let f = allEntries;
+    if (q) f = f.filter(e => e.content.toLowerCase().includes(q));
+    if (m==='high') f = f.filter(e => e.mood_score >= 7);
+    if (m==='mid')  f = f.filter(e => e.mood_score >= 4 && e.mood_score < 7);
+    if (m==='low')  f = f.filter(e => e.mood_score < 4);
+    renderEntries(f);
+};
+
+let deleteId = null;
+window.confirmDelete = id => { deleteId = id; document.getElementById('deleteModal').classList.add('open'); };
+window.cancelDelete  = ()  => { deleteId = null; document.getElementById('deleteModal').classList.remove('open'); };
+window.executeDelete = async function() {
+    document.getElementById('deleteModal').classList.remove('open');
+    if (!deleteId) return;
+    const r = await apiFetch('/api/entries/'+deleteId+'/', {method:'DELETE'});
+    if (r && (r.ok || r.status===204)) { const card=document.getElementById('entry-'+deleteId); if(card){card.style.transition='opacity .3s';card.style.opacity='0';setTimeout(()=>card.remove(),300);} allEntries=allEntries.filter(e=>e.id!==deleteId); document.getElementById('entryCount').textContent=allEntries.length+' entries'; }
+    deleteId = null;
+};
+
+let editId = null;
+window.openEditModal = function(id, content) { editId=id; document.getElementById('editTextarea').value=content.replace(/\\n/g,'\n'); document.getElementById('editModal').classList.add('open'); };
+window.cancelEdit = () => { editId=null; document.getElementById('editModal').classList.remove('open'); };
+window.saveEdit = async function() {
+    if (!editId) return;
+    const content = document.getElementById('editTextarea').value.trim();
+    if (!content) { alert('Entry cannot be empty.'); return; }
+    const btn = document.getElementById('saveEditBtn'); btn.textContent='Saving...'; btn.disabled=true;
+    const r = await apiFetch('/api/entries/'+editId+'/', {method:'PATCH', body:JSON.stringify({content})});
+    if (r && r.ok) { const d=await r.json(); const el=document.getElementById('entry-content-'+editId); if(el) el.textContent=d.content; allEntries=allEntries.map(e=>e.id===editId?{...e,content:d.content,mood_score:d.mood_score}:e); }
+    document.getElementById('editModal').classList.remove('open'); btn.textContent='Save Changes'; btn.disabled=false; editId=null; loadEntries();
+};
+
+loadEntries();
+</script>
+{% endblock %}

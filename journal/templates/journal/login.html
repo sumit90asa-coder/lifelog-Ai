@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Lifelog AI</title>
+    {% load static %}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+</head>
+<body>
+<div class="auth-wrap">
+<div class="auth-card">
+
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:2rem;">
+        <div class="logo-icon">L</div>
+        <div><div class="logo-title">Lifelog AI</div><div class="logo-sub">Smart Journal SaaS</div></div>
+    </div>
+
+    <h1 class="auth-title">Welcome Back</h1>
+    <p class="auth-sub">Login to continue your journal</p>
+
+    <div style="display:flex;flex-direction:column;gap:.75rem;">
+        <input type="text"     id="username" class="input" placeholder="Username">
+        <input type="password" id="password" class="input" placeholder="Password">
+        <p id="errorMsg" style="color:#e07060;font-size:.85rem;display:none;"></p>
+        <button id="loginBtn" onclick="loginUser()" class="btn btn-primary" style="width:100%;justify-content:center;padding:1rem;">Login</button>
+    </div>
+
+    <p style="text-align:center;margin-top:1.25rem;font-size:.9rem;color:var(--text-m);">
+        Don't have an account? <a href="/register/" style="color:var(--primary-l);text-decoration:none;">Register</a>
+    </p>
+
+</div>
+</div>
+
+<script>
+if (localStorage.getItem('access_token')) window.location.href = '/dashboard/';
+
+async function loginUser() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
+    const errorMsg = document.getElementById('errorMsg');
+    const btn      = document.getElementById('loginBtn');
+    errorMsg.style.display = 'none';
+    if (!username || !password) { errorMsg.textContent='Please enter username and password.'; errorMsg.style.display='block'; return; }
+    btn.textContent='Logging in...'; btn.disabled=true;
+    try {
+        const res  = await fetch('/api/token/', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password}) });
+        const data = await res.json();
+        if (!res.ok) { errorMsg.textContent=data.detail||'Invalid username or password.'; errorMsg.style.display='block'; btn.textContent='Login'; btn.disabled=false; return; }
+        localStorage.setItem('access_token',  data.access);
+        localStorage.setItem('refresh_token', data.refresh);
+        window.location.href = '/dashboard/';
+    } catch(e) { errorMsg.textContent='Network error.'; errorMsg.style.display='block'; btn.textContent='Login'; btn.disabled=false; }
+}
+document.addEventListener('keydown', e => { if (e.key==='Enter') loginUser(); });
+</script>
+</body>
+</html>

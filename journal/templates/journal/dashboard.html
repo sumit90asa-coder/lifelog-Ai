@@ -1,0 +1,190 @@
+{% extends 'journal/base.html' %}
+{% block title %}Dashboard — Lifelog AI{% endblock %}
+
+{% block content %}
+
+<div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+
+    <!-- MAIN -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1.25rem;">
+
+        <!-- Header -->
+        <div class="page-header">
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-sub">AI-powered life analytics platform</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid-stats">
+            <div class="stat-card">
+                <div class="stat-label">Total Entries</div>
+                <div id="totalEntries" class="stat-value">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Average Mood</div>
+                <div id="averageMood" class="stat-value stat-green">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Current Streak</div>
+                <div id="currentStreak" class="stat-value stat-amber">—</div>
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;">
+                <div>
+                    <div class="card-title">Mood Analytics</div>
+                    <div class="card-sub" style="margin-bottom:0;">Weekly emotional tracking</div>
+                </div>
+                <span id="moodTrendPct" style="font-weight:700;font-size:1rem;"></span>
+            </div>
+            <div class="chart-wrap"><canvas id="moodChart"></canvas></div>
+        </div>
+
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="dash-right" style="width:320px;flex-shrink:0;display:flex;flex-direction:column;gap:1rem;">
+
+        <div class="card">
+            <div class="card-title" style="margin-bottom:.25rem;">Live AI Journal</div>
+            <div class="card-sub">Real-time NLP Analysis</div>
+
+            <textarea id="journalInput" class="input" style="height:160px;resize:none;margin-bottom:.75rem;"
+                placeholder="Write about your day..."></textarea>
+
+            <button onclick="saveEntry()" class="btn btn-primary" style="width:100%;justify-content:center;">
+                Save Entry
+            </button>
+
+            <div class="card" style="margin-top:.75rem;padding:1rem;">
+                <div style="font-size:.8rem;color:var(--text-m);margin-bottom:.3rem;">Mood Score</div>
+                <div id="moodScore" class="stat-value stat-green" style="font-size:2rem;">0</div>
+            </div>
+
+            <div class="card" style="margin-top:.75rem;padding:1rem;">
+                <div style="font-size:.8rem;color:var(--text-m);margin-bottom:.5rem;">Activities</div>
+                <div id="activities" style="display:flex;flex-wrap:wrap;gap:.4rem;">
+                    <span class="tag tag-green">None</span>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:.75rem;padding:1rem;">
+                <div style="font-size:.8rem;color:var(--text-m);margin-bottom:.5rem;">People Mentioned</div>
+                <div id="peopleMentioned" style="display:flex;flex-wrap:wrap;gap:.4rem;">
+                    <span class="tag tag-beige">None</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% load static %}
+<script>
+if (!requireAuth()) {}
+
+// ── Chart ──────────────────────────────────────────────
+const moodChart = new Chart(document.getElementById('moodChart').getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: 'Mood', data: [], borderColor: '#5a8c3e', backgroundColor: 'rgba(90,140,62,0.15)', fill: true, tension: 0.4, pointBackgroundColor: '#7ab85a', pointRadius: 4 }] },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#a89878' } } },
+        scales: {
+            x: { ticks: { color: '#8a7550' }, grid: { color: 'rgba(90,140,62,0.1)' } },
+            y: { ticks: { color: '#8a7550' }, grid: { color: 'rgba(90,140,62,0.1)' }, min: 0, max: 10 }
+        }
+    }
+});
+
+function updateChart(entries) {
+    if (!entries.length) return;
+    const byDate = {}; const labelMap = {};
+    entries.forEach(e => {
+        const d = new Date(e.created_at);
+        const k = d.toISOString().slice(0,10);
+        const l = d.toLocaleDateString('en-GB', {day:'2-digit',month:'short'});
+        if (!byDate[k]) { byDate[k] = []; labelMap[k] = l; }
+        byDate[k].push(parseFloat(e.mood_score) || 0);
+    });
+    const keys = Object.keys(byDate).sort().slice(-14);
+    moodChart.data.labels = keys.map(k => labelMap[k]);
+    moodChart.data.datasets[0].data = keys.map(k => { const s=byDate[k]; return Math.round(s.reduce((a,b)=>a+b,0)/s.length*10)/10; });
+    moodChart.update();
+    const data = moodChart.data.datasets[0].data;
+    const el = document.getElementById('moodTrendPct');
+    if (el && data.length >= 2) {
+        const diff = parseFloat((data[data.length-1] - data[0]).toFixed(1));
+        el.textContent = diff === 0 ? '→ Stable' : (diff > 0 ? '▲ +' : '▼ ') + Math.abs(diff) + ' pts';
+        el.style.color = diff > 0 ? '#7ab85a' : diff === 0 ? '#a89878' : '#e07060';
+    }
+}
+
+// ── Load Insights ──────────────────────────────────────
+async function loadInsights() {
+    const r = await apiFetch('/api/insights/'); if (!r) return;
+    const d = await r.json();
+    document.getElementById('totalEntries').textContent  = d.total_entries  ?? '—';
+    document.getElementById('averageMood').textContent   = d.average_mood   ?? '—';
+    document.getElementById('currentStreak').textContent = d.current_streak ?? '—';
+}
+
+// ── Save Entry ─────────────────────────────────────────
+async function saveEntry() {
+    const content = document.getElementById('journalInput').value.trim();
+    if (!content) { alert('Please write something first.'); return; }
+    const r = await apiFetch('/api/entries/', { method:'POST', body:JSON.stringify({content}) });
+    if (!r || !r.ok) { alert('Failed to save.'); return; }
+    const d = await r.json();
+    document.getElementById('moodScore').textContent = d.mood_score ?? 0;
+    document.getElementById('activities').innerHTML = d.activities?.length ? d.activities.map(a=>buildTag(a,'tag-green')).join(' ') : buildTag('None','tag-green');
+    document.getElementById('peopleMentioned').innerHTML = d.people_mentioned?.length ? d.people_mentioned.map(p=>buildTag(p,'tag-beige')).join(' ') : buildTag('None','tag-beige');
+    document.getElementById('journalInput').value = '';
+    loadInsights(); loadChartFromEntries();
+}
+
+// ── Live NLP preview ───────────────────────────────────
+let previewTimer = null;
+document.getElementById('journalInput').addEventListener('input', function() {
+    clearTimeout(previewTimer);
+    if (!this.value.trim()) return;
+    previewTimer = setTimeout(async () => {
+        const r = await apiFetch('/api/entries/preview/', { method:'POST', body:JSON.stringify({content:this.value}) });
+        if (!r || !r.ok) return;
+        const p = await r.json();
+        document.getElementById('moodScore').textContent = p.mood_score ?? 0;
+        document.getElementById('activities').innerHTML = p.activities?.length ? p.activities.map(a=>buildTag(a,'tag-green')).join(' ') : buildTag('None','tag-green');
+        document.getElementById('peopleMentioned').innerHTML = p.people_mentioned?.length ? p.people_mentioned.map(pe=>buildTag(pe,'tag-beige')).join(' ') : buildTag('None','tag-beige');
+    }, 400);
+});
+
+// ── Load chart from entries ────────────────────────────
+async function loadChartFromEntries() {
+    const r = await apiFetch('/api/entries/'); if (!r || !r.ok) return;
+    const raw = await r.json();
+    const entries = Array.isArray(raw) ? raw : (raw.results || []);
+    if (!entries.length) return;
+    updateChart(entries);
+    const latest = entries[0];
+    document.getElementById('moodScore').textContent = latest.mood_score ?? 0;
+    for (const entry of entries.slice(0,10)) {
+        const pr = await apiFetch('/api/entries/preview/', { method:'POST', body:JSON.stringify({content:entry.content}) });
+        if (!pr || !pr.ok) continue;
+        const parsed = await pr.json();
+        const acts = parsed.activities || []; const peop = parsed.people_mentioned || [];
+        document.getElementById('moodScore').textContent = entry.mood_score ?? 0;
+        if (acts.length) document.getElementById('activities').innerHTML = acts.map(a=>buildTag(a,'tag-green')).join(' ');
+        if (peop.length) document.getElementById('peopleMentioned').innerHTML = peop.map(p=>buildTag(p,'tag-beige')).join(' ');
+        if (acts.length && peop.length) break;
+    }
+}
+
+loadInsights();
+loadChartFromEntries();
+</script>
+{% endblock %}
